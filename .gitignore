@@ -1,0 +1,40 @@
+# Environment & secrets
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Config with API tokens (use config.yaml.example as template)
+config/config.yaml
+
+# Data & logs
+data/
+logs/
+
+# Docker secrets
+docker/.env
+docker/.db.env
+
+# macOS
+.DS_Store
+*.app/
+
+# Temp files
+/tmp/
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+
+# launchd plist (contains hardcoded user paths)
+scripts/com.autobudget.sync.plist
+
+# AppleScript build artifacts
+scripts/copy_chatdb.applescript
+CopyChatDB.app/
+AutoBudgetSync.app/

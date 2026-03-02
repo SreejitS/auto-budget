@@ -1,0 +1,37 @@
+services:
+  app:
+    image: fireflyiii/core:latest
+    hostname: app
+    container_name: firefly_iii_core
+    restart: always
+    volumes:
+      - firefly_iii_upload:/var/www/html/storage/upload
+    env_file:
+      - .env
+      - .db.env
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - firefly_iii
+
+  db:
+    image: mariadb:lts
+    hostname: db
+    container_name: firefly_iii_db
+    restart: always
+    env_file:
+      - .db.env
+    volumes:
+      - firefly_iii_db:/var/lib/mysql
+    networks:
+      - firefly_iii
+
+volumes:
+  firefly_iii_upload:
+  firefly_iii_db:
+
+networks:
+  firefly_iii:
+    driver: bridge

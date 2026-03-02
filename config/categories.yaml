@@ -1,0 +1,18 @@
+# Budget Categories
+# =================
+# These categories are used by the AI categorizer and mapped to Firefly III.
+
+categories:
+  - Groceries
+  - Dining
+  - Transport
+  - Shopping
+  - Entertainment
+  - Utilities
+  - Healthcare
+  - Education
+  - Subscriptions
+  - Transfer
+  - ATM
+  - Salary
+  - Other
