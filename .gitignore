@@ -1,5 +1,6 @@
 # Environment & secrets
 .env
+server/.env
 venv/
 __pycache__/
 *.pyc
@@ -10,11 +11,15 @@ config/config.yaml
 
 # Data & logs
 data/
+*/data/
 logs/
+*/logs/
 
 # Docker secrets
 docker/.env
 docker/.db.env
+server/docker/.env
+server/docker/.db.env
 
 # macOS
 .DS_Store
@@ -31,10 +36,8 @@ docker/.db.env
 # Claude Code
 .claude/
 
-# launchd plist (contains hardcoded user paths)
-scripts/com.autobudget.sync.plist
-
-# AppleScript build artifacts
-scripts/copy_chatdb.applescript
+# Mac-specific artifacts
+mac/scripts/com.autobudget.sync.plist
+mac/scripts/copy_chatdb.applescript
 CopyChatDB.app/
 AutoBudgetSync.app/

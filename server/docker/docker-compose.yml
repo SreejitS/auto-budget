@@ -1,0 +1,58 @@
+services:
+  app:
+    image: fireflyiii/core:latest
+    hostname: app
+    container_name: firefly_iii_core
+    restart: always
+    volumes:
+      - firefly_iii_upload:/var/www/html/storage/upload
+    env_file:
+      - .env
+      - .db.env
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - firefly_iii
+
+  db:
+    image: mariadb:lts
+    hostname: db
+    container_name: firefly_iii_db
+    restart: always
+    env_file:
+      - .db.env
+    volumes:
+      - firefly_iii_db:/var/lib/mysql
+    networks:
+      - firefly_iii
+
+  auto-budget-api:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    container_name: auto_budget_api
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - auto_budget_data:/app/server/data
+    env_file:
+      - ../../server/.env
+    environment:
+      - STATE_DB_PATH=/app/server/data/auto-budget.db
+      - CONFIG_PATH=/app/config/config.yaml
+    depends_on:
+      - app
+    networks:
+      - firefly_iii
+
+volumes:
+  firefly_iii_upload:
+  firefly_iii_db:
+  auto_budget_data:
+
+networks:
+  firefly_iii:
+    driver: bridge

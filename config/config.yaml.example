@@ -1,11 +1,20 @@
+# Auto-Budget Configuration
+# =========================
+# Used by both Mac and RPi server.
+
+# --- Mac-only settings ---
 imessage:
   sender_ids:
     - "RiyadBank"  # Bank sender ID in iMessage
 
+# --- Firefly III ---
 firefly:
-  base_url: "http://localhost:8080"
+  # Mac: http://localhost:8080
+  # RPi (Docker internal): http://app:8080
+  base_url: "http://app:8080"
   api_token: "YOUR_FIREFLY_PERSONAL_ACCESS_TOKEN"
   asset_account_name: "Riyad Bank Account"
 
+# --- Mac sync settings ---
 sync:
   batch_size: 100
