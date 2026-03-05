@@ -22,8 +22,10 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from shared.categorizer import TransactionCategorizer
+from shared.exchange_rates import get_sar_amount
 from shared.firefly_client import FireflyClient
 from shared.state import StateManager
+from mac.src.message_parser import MessageParser
 
 app = Flask(__name__)
 
@@ -168,8 +170,8 @@ def create_transaction():
     date_str = data.get("date", datetime.now().isoformat())
     source = data.get("source", "iphone")
 
-    if txn_type not in ("withdrawal", "deposit"):
-        return jsonify({"error": "type must be 'withdrawal' or 'deposit'"}), 400
+    if txn_type not in ("withdrawal", "deposit", "transfer"):
+        return jsonify({"error": "type must be 'withdrawal', 'deposit', or 'transfer'"}), 400
 
     if not merchant:
         return jsonify({"error": "merchant cannot be empty"}), 400
@@ -199,27 +201,47 @@ def create_transaction():
     asset_account = _config.get("firefly", {}).get(
         "asset_account_name", "Riyad Bank Account"
     )
+    cc_account = _config.get("firefly", {}).get(
+        "credit_card_account_name", "Riyad Bank Credit Card"
+    )
 
-    if txn_type == "withdrawal":
+    if txn_type == "transfer":
+        source_name = asset_account
+        destination_name = cc_account
+    elif txn_type == "withdrawal":
         source_name = asset_account
         destination_name = merchant
     else:
         source_name = merchant
         destination_name = asset_account
 
+    # Handle foreign currency
+    firefly_amount = amount
+    firefly_currency = "SAR"
+    foreign_amount = None
+    foreign_currency_code = None
+
+    if currency != "SAR":
+        foreign_amount = amount
+        foreign_currency_code = currency
+        firefly_amount = get_sar_amount(amount, currency)
+        firefly_currency = "SAR"
+
     try:
         result = _firefly.create_transaction(
             transaction_type=txn_type,
-            amount=amount,
+            amount=firefly_amount,
             description=merchant,
             date=txn_date,
             source_name=source_name,
             destination_name=destination_name,
             category_name=category,
-            currency_code=currency,
+            currency_code=firefly_currency,
             notes=f"Auto-imported from {source}",
             external_id=external_id,
             tags=["auto-imported", f"source:{source}"],
+            foreign_amount=foreign_amount,
+            foreign_currency_code=foreign_currency_code,
         )
 
         is_duplicate = result.get("duplicate", False)
@@ -247,6 +269,131 @@ def create_transaction():
 
     except Exception as e:
         logger.error(f"Failed to create transaction: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sms", methods=["POST"])
+@require_api_key
+def process_sms():
+    """
+    Accept raw SMS text from iPhone Shortcuts.
+    Parses server-side using the full message_parser, then discards raw text.
+
+    JSON body:
+    {
+        "text": "<raw SMS body>"
+    }
+    """
+    data = request.get_json(force=True)
+    text = data.get("text", "").strip()
+
+    if not text:
+        return jsonify({"error": "missing 'text' field"}), 400
+
+    # Parse using the existing message parser
+    parser = MessageParser()
+    parsed = parser.parse(text, message_rowid=0, message_date=datetime.now())
+
+    # Raw SMS text is NOT logged or stored — only parsed fields are used
+    if parsed is None:
+        logger.info("SMS received but not a transaction (OTP, promo, etc.)")
+        return jsonify({"status": "skipped", "reason": "not a transaction"}), 200
+
+    amount = parsed.amount
+    currency = parsed.currency
+    merchant = parsed.merchant_or_description
+    txn_type = parsed.transaction_type.value
+    date_str = datetime.now().isoformat()
+
+    # Generate dedup ID
+    external_id = _generate_external_id(date_str, amount, merchant)
+
+    # Check if already processed
+    if _state.is_api_transaction_processed(external_id):
+        return jsonify({
+            "status": "duplicate",
+            "category": None,
+            "external_id": external_id,
+        }), 200
+
+    # Categorize merchant
+    category = _categorizer.categorize_single(merchant)
+    _state.update_merchant_cache(_categorizer.cache)
+
+    # Build Firefly III transaction
+    asset_account = _config.get("firefly", {}).get(
+        "asset_account_name", "Riyad Bank Account"
+    )
+    cc_account = _config.get("firefly", {}).get(
+        "credit_card_account_name", "Riyad Bank Credit Card"
+    )
+
+    if txn_type == "transfer":
+        source_name = asset_account
+        destination_name = cc_account
+    elif txn_type == "withdrawal":
+        source_name = asset_account
+        destination_name = merchant
+    else:
+        source_name = merchant
+        destination_name = asset_account
+
+    # Handle foreign currency
+    firefly_amount = amount
+    firefly_currency = "SAR"
+    foreign_amount_val = None
+    foreign_currency_code = None
+
+    if currency != "SAR":
+        foreign_amount_val = amount
+        foreign_currency_code = currency
+        firefly_amount = get_sar_amount(amount, currency)
+        firefly_currency = "SAR"
+
+    try:
+        result = _firefly.create_transaction(
+            transaction_type=txn_type,
+            amount=firefly_amount,
+            description=merchant,
+            date=datetime.now(),
+            source_name=source_name,
+            destination_name=destination_name,
+            category_name=category,
+            currency_code=firefly_currency,
+            notes="Auto-imported from iPhone SMS",
+            external_id=external_id,
+            tags=["auto-imported", "source:iphone"],
+            foreign_amount=foreign_amount_val,
+            foreign_currency_code=foreign_currency_code,
+        )
+
+        is_duplicate = result.get("duplicate", False)
+
+        if not is_duplicate:
+            _state.mark_api_transaction_processed(
+                external_id=external_id,
+                amount=amount,
+                merchant=merchant,
+                category=category,
+                source="iphone",
+            )
+
+        logger.info(
+            f"SMS {'Duplicate' if is_duplicate else 'Created'}: "
+            f"{merchant} {amount} {currency} [{category}]"
+        )
+
+        return jsonify({
+            "status": "duplicate" if is_duplicate else "created",
+            "category": category,
+            "merchant": merchant,
+            "amount": amount,
+            "currency": currency,
+            "external_id": external_id,
+        }), 200 if is_duplicate else 201
+
+    except Exception as e:
+        logger.error(f"Failed to create transaction from SMS: {e}")
         return jsonify({"error": str(e)}), 500
 
 

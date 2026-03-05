@@ -28,6 +28,7 @@ from typing import Optional
 class TransactionType(Enum):
     WITHDRAWAL = "withdrawal"
     DEPOSIT = "deposit"
+    TRANSFER = "transfer"
 
 
 @dataclass
@@ -286,7 +287,7 @@ def _detect_transaction_type(text: str) -> Optional[tuple[TransactionType, str]]
     if re.search(r"حوالة صادرة داخلية", text):
         return TransactionType.WITHDRAWAL, "Internal Transfer (Out)"
     if re.search(r"حوالة صادرة\s*:\s*بين حساباتك", text):
-        return TransactionType.WITHDRAWAL, "Transfer Between Accounts (Out)"
+        return TransactionType.TRANSFER, "Transfer Between Accounts (Out)"
     if re.search(r"حوالة صادرة", text):
         return TransactionType.WITHDRAWAL, "Outgoing Transfer"
 
@@ -296,7 +297,7 @@ def _detect_transaction_type(text: str) -> Optional[tuple[TransactionType, str]]
 
     # Credit card payment (بطاقة إئتمانية تسديد)
     if re.search(r"(?:بطاقة إئتمانية تسديد|تأكيد السداد)", text):
-        return TransactionType.WITHDRAWAL, "Credit Card Payment"
+        return TransactionType.TRANSFER, "Credit Card Payment"
 
     # ATM withdrawal / deposit
     if re.search(r"سحب.*(?:صراف|ATM)", text):
@@ -310,7 +311,7 @@ def _detect_transaction_type(text: str) -> Optional[tuple[TransactionType, str]]
 
     # Credit card payment (سداد بطاقات ائتمان)
     if re.search(r"سداد بطاقات ائتمان", text):
-        return TransactionType.WITHDRAWAL, "Credit Card Payment"
+        return TransactionType.TRANSFER, "Credit Card Payment"
 
     # Cash back (استرجاع نقدي)
     if re.search(r"استرجاع نقدي", text):
@@ -338,7 +339,7 @@ def _detect_transaction_type(text: str) -> Optional[tuple[TransactionType, str]]
 
     # Incoming transfer
     if re.search(r"حوالة واردة\s*:\s*بين حساباتك", text):
-        return TransactionType.DEPOSIT, "Transfer Between Accounts (In)"
+        return TransactionType.TRANSFER, "Transfer Between Accounts (In)"
     if re.search(r"حوالة واردة داخلية", text):
         return TransactionType.DEPOSIT, "Internal Transfer (In)"
     if re.search(r"حوالة واردة", text):

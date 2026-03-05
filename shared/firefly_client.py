@@ -123,6 +123,8 @@ class FireflyClient:
         notes: Optional[str] = None,
         external_id: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        foreign_amount: Optional[float] = None,
+        foreign_currency_code: Optional[str] = None,
     ) -> dict:
         """Create a transaction in Firefly III.
 
@@ -142,6 +144,8 @@ class FireflyClient:
             notes: Additional notes (e.g., original SMS text).
             external_id: Unique ID for deduplication (e.g., "imsg_12345").
             tags: List of tags (e.g., ["auto-imported"]).
+            foreign_amount: Original amount in foreign currency.
+            foreign_currency_code: 3-letter code of the foreign currency.
 
         Returns:
             Transaction data dict, or dict with "duplicate": True if already exists.
@@ -164,6 +168,9 @@ class FireflyClient:
             transaction_split["external_id"] = str(external_id)
         if tags:
             transaction_split["tags"] = tags
+        if foreign_amount is not None and foreign_currency_code:
+            transaction_split["foreign_amount"] = str(round(foreign_amount, 2))
+            transaction_split["foreign_currency_code"] = foreign_currency_code
 
         payload = {
             "error_if_duplicate_hash": True,

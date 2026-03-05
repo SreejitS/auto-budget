@@ -19,6 +19,8 @@ from .imessage_reader import IMessageReader
 from .message_parser import MessageParser, TransactionType
 from .state import StateManager
 
+from shared.exchange_rates import get_sar_amount
+
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
@@ -71,6 +73,9 @@ class BudgetSync:
         )
 
         self.asset_account_name = self.config["firefly"]["asset_account_name"]
+        self.cc_account_name = self.config["firefly"].get(
+            "credit_card_account_name", "Riyad Bank Credit Card"
+        )
         self.batch_size = self.config.get("sync", {}).get("batch_size", 100)
 
     def run(self):
@@ -197,7 +202,11 @@ class BudgetSync:
 
     def _push_to_firefly(self, txn, category: str) -> dict:
         """Map a parsed transaction to a Firefly III API call."""
-        if txn.transaction_type == TransactionType.WITHDRAWAL:
+        if txn.transaction_type == TransactionType.TRANSFER:
+            firefly_type = "transfer"
+            source_name = self.asset_account_name
+            destination_name = self.cc_account_name
+        elif txn.transaction_type == TransactionType.WITHDRAWAL:
             firefly_type = "withdrawal"
             source_name = self.asset_account_name
             destination_name = txn.merchant_or_description or "Unknown Merchant"
@@ -210,18 +219,31 @@ class BudgetSync:
         if txn.card_last_4:
             description += f" (card ***{txn.card_last_4})"
 
+        # Handle foreign currency: convert to SAR and keep original as foreign
+        amount = txn.amount
+        currency_code = "SAR"
+        foreign_amount = None
+        foreign_currency_code = None
+
+        if txn.currency != "SAR":
+            foreign_amount = txn.amount
+            foreign_currency_code = txn.currency
+            amount = get_sar_amount(txn.amount, txn.currency)
+
         return self.firefly.create_transaction(
             transaction_type=firefly_type,
-            amount=txn.amount,
+            amount=amount,
             description=description,
             date=txn.date,
             source_name=source_name,
             destination_name=destination_name,
             category_name=category,
-            currency_code="SAR",
+            currency_code=currency_code,
             notes=f"Auto-imported from iMessage.\nOriginal: {txn.raw_text}",
             external_id=f"imsg_{txn.message_rowid}",
             tags=["auto-imported"],
+            foreign_amount=foreign_amount,
+            foreign_currency_code=foreign_currency_code,
         )
 
 
